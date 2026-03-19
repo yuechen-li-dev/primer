@@ -471,6 +471,113 @@ examples:
             std::unordered_map<std::string, std::vector<std::function<void()>>> callbacks;
         };
 
+  integer_safety:
+    summary:
+      Integer conversions, size arithmetic, and count math should be explicit and boring.
+
+    good_explicit_size_arithmetic:
+      why:
+        The code keeps element counts and byte counts explicit and avoids accidental narrowing.
+      code: |
+        std::size_t ByteCountForVertices(std::size_t vertex_count, std::size_t stride_bytes)
+        {
+            return vertex_count * stride_bytes;
+        }
+
+    good_explicit_narrowing_with_reason:
+      why:
+        Narrowing is visible and intentional instead of accidental.
+      code: |
+        std::uint32_t ToU32(std::size_t value)
+        {
+            assert(value <= static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
+            return static_cast<std::uint32_t>(value);
+        }
+
+    bad_signed_unsigned_mix:
+      why:
+        Signed and unsigned values are mixed casually, which can silently misbehave.
+      code: |
+        int index = -1;
+        std::vector<int> values = {1, 2, 3};
+
+        if (index < values.size())
+        {
+            // Looks plausible, but the comparison is already suspicious.
+        }
+
+    bad_implicit_narrowing:
+      why:
+        The conversion is silent, and the reader cannot tell whether truncation is acceptable.
+      code: |
+        std::size_t byte_count = ComputeLargeByteCount();
+        std::uint32_t size_u32 = byte_count;
+
+  nodiscard:
+    summary:
+      Important results should not be easy to ignore.
+
+    good_nodiscard_status:
+      why:
+        The API makes status-bearing results harder to discard accidentally.
+      code: |
+        struct [[nodiscard]] SaveResult
+        {
+            bool success;
+            std::string error;
+        };
+
+        [[nodiscard]] SaveResult SaveDocument(const std::string& path, const std::string& content);
+
+    good_nodiscard_boolean_query:
+      why:
+        The caller is nudged to handle a meaningful boolean result.
+      code: |
+        class Buffer
+        {
+        public:
+            [[nodiscard]] bool IsValid() const;
+        };
+
+    bad_ignored_result:
+      why:
+        The call may fail, but the code makes it easy to proceed as though nothing happened.
+      code: |
+        SaveDocument("report.txt", "hello");
+
+  low_level_memory_and_casts:
+    summary:
+      Raw byte handling must respect alignment and aliasing rules.
+
+    good_explicit_spirv_decode:
+      why:
+        The code assembles words from bytes explicitly instead of assuming alignment.
+      code: |
+        std::vector<std::uint32_t> DecodeSpirvBytes(const std::vector<std::byte>& bytes)
+        {
+            assert(bytes.size() % 4 == 0);
+
+            std::vector<std::uint32_t> words(bytes.size() / 4);
+            for (std::size_t i = 0; i < words.size(); ++i)
+            {
+                const std::size_t base = i * 4;
+                words[i] =
+                    static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 0])) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 1])) << 8) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 2])) << 16) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 3])) << 24);
+            }
+
+            return words;
+        }
+
+    bad_unaligned_reinterpret_cast:
+      why:
+        The cast assumes alignment and object validity that arbitrary byte storage may not provide.
+      code: |
+        const std::uint32_t* words =
+            reinterpret_cast<const std::uint32_t*>(raw_bytes.data());
+
 closing:
   message:
     These examples are anchors, not decoration.
