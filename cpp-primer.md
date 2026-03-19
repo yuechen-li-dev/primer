@@ -93,6 +93,10 @@ restricted:
   - Macros are restricted to unavoidable low-level use such as platform or compiler glue and include control.
   - Hidden singleton patterns are restricted.
   - Custom allocators are restricted unless the repository already has a clearly established low-level allocation strategy.
+  - reinterpret_cast is restricted.
+  - Unaligned typed reads from byte storage are banned.
+  - Implicit narrowing conversions in normal code are restricted.
+  - Silent signed and unsigned mixing is restricted.
 
 default_patterns:
   error_handling:
@@ -161,6 +165,42 @@ default_patterns:
       - Keep side effects visible.
     guidance:
       - Callers should not need to guess about lifetime, cost, or failure behavior.
+
+  integer_safety:
+    headline:
+      Integer conversions and size arithmetic must be explicit.
+    rules:
+      - Do not mix signed and unsigned integers casually.
+      - Do not rely on implicit narrowing conversions.
+      - Use explicit casts only when the range and intent are clear.
+      - Be careful with multiplication, byte counts, element counts, and buffer sizes.
+      - Prefer checked reasoning over convenient arithmetic when values cross API or allocation boundaries.
+    guidance:
+      - Size and count bugs often look ordinary in review and still produce wrong behavior.
+      - If the integer story is ambiguous, make it explicit.
+
+  low_level_memory_and_casts:
+    headline:
+      Low-level byte handling must respect alignment and aliasing rules.
+    rules:
+      - Do not reinterpret raw byte storage as typed objects unless alignment and lifetime are unquestionably valid.
+      - Prefer safe byte loading patterns over reinterpret_cast.
+      - When decoding binary data, copy or assemble bytes into the destination representation explicitly.
+      - Do not assume that data loaded from files or arbitrary buffers is suitably aligned for typed reads.
+    guidance:
+      - Plausible-looking low-level code can still be undefined behavior.
+      - If alignment or aliasing is in doubt, the direct cast is the wrong answer.
+
+  nodiscard_and_results:
+    headline:
+      Important results must not be easy to ignore.
+    rules:
+      - Use [[nodiscard]] on functions and types whose return values signal status, failure, or required follow-up action.
+      - Do not discard error-bearing or validity-bearing return values casually.
+      - Prefer APIs that force the caller to confront failure instead of silently continuing.
+    guidance:
+      - If a result matters for correctness, make ignoring it harder.
+      - Compiler help is better than hoping reviewers notice a dropped return value.
 
   headers_and_includes:
     headline:
