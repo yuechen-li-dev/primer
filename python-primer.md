@@ -110,6 +110,7 @@ restricted:
   - Implicit registration systems are restricted.
   - Reflection-heavy dispatch is restricted.
   - Magic __getattr__, __setattr__, and similar behavior-hiding hooks are restricted outside narrow justified use.
+  - Mutable default arguments are banned.
 
 default_patterns:
   functions_first:
@@ -138,6 +139,30 @@ default_patterns:
     guidance:
       - Type hints are not decoration.
       - Their job is to make shape, expectation, and intent visible before runtime.
+      - Prefer Protocol for structural boundaries when behavior matters more than inheritance ancestry.
+
+  dataclasses_and_validation:
+    headline:
+      Dataclasses should stay simple, but may validate real invariants.
+    rules:
+      - Prefer dataclasses for structured records with clear fields.
+      - Use __post_init__ for small, direct invariant checks when validation is genuinely part of the type.
+      - Do not turn dataclasses into mini-frameworks with hidden behavior.
+      - Keep validation local, explicit, and easy to test.
+    guidance:
+      - A dataclass may protect a real invariant.
+      - It should not become a magical lifecycle object.
+
+  defaults_and_function_signatures:
+    headline:
+      Function defaults must not hide shared mutable state.
+    rules:
+      - Do not use mutable default arguments.
+      - Use None and create a fresh value inside the function when a mutable default is needed.
+      - Keep default behavior explicit and unsurprising.
+    guidance:
+      - Mutable defaults are a classic haunted-house bug.
+      - If state should persist across calls, make that persistence explicit instead of smuggling it through a default.
 
   data_modeling:
     headline:
@@ -204,6 +229,7 @@ default_patterns:
     guidance:
       - A module should have a reason to exist beyond "miscellaneous helpers."
       - If a module is becoming a storage closet, split it.
+      - Keep package export surfaces intentional rather than accidental when __init__.py is used.
 
   dependencies:
     headline:
