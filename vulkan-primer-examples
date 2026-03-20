@@ -390,6 +390,130 @@ examples:
             0, nullptr,
             0, nullptr);
 
+  timestamps_and_queries:
+    summary:
+      GPU timing should follow explicit query recipes instead of plausible-looking local improvisation.
+
+    good_explicit_timestamp_bracketing:
+      why:
+        The timestamps intentionally bracket the GPU work being measured.
+      code: |
+        void RecordTimedComputeDispatch(VkCommandBuffer command_buffer)
+        {
+            vkCmdResetQueryPool(command_buffer, timestamp_query_pool_, 0, 2);
+            vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timestamp_query_pool_, 0);
+
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline_);
+            vkCmdDispatch(command_buffer, group_count_x_, 1, 1);
+
+            vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timestamp_query_pool_, 1);
+        }
+
+    good_read_after_completion_policy:
+      why:
+        Query results are read only after the backend has established completion.
+      code: |
+        void ResolveCompletedFrameQueries(const VulkanFrameContext& frame)
+        {
+            WaitForFrameFence(frame);
+            vkGetQueryPoolResults(
+                device_,
+                timestamp_query_pool_,
+                0,
+                2,
+                sizeof(results_),
+                results_.data(),
+                sizeof(std::uint64_t),
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+        }
+
+    bad_timestamp_stage_folklore:
+      why:
+        The code records plausible timestamps without a clear statement of what GPU interval is actually being measured.
+      code: |
+        vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, query_pool_, 0);
+        vkCmdDispatch(command_buffer, group_count_x_, 1, 1);
+        vkCmdWriteTimestamp(command_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, query_pool_, 1);
+
+    bad_query_readback_too_early:
+      why:
+        Query results are read with no clear completion rule.
+      code: |
+        vkGetQueryPoolResults(device_, query_pool_, 0, 2, sizeof(results), results, sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT);
+
+  shader_module_loading:
+    summary:
+      SPIR-V loading must respect byte representation and alignment.
+
+    good_aligned_spirv_decode:
+      why:
+        The backend converts bytes into aligned 32-bit words explicitly before shader module creation.
+      code: |
+        std::vector<std::uint32_t> DecodeSpirvFile(const std::vector<std::byte>& bytes)
+        {
+            assert(bytes.size() % 4 == 0);
+
+            std::vector<std::uint32_t> words(bytes.size() / 4);
+            for (std::size_t i = 0; i < words.size(); ++i)
+            {
+                const std::size_t base = i * 4;
+                words[i] =
+                    static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 0])) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 1])) << 8) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 2])) << 16) |
+                    (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[base + 3])) << 24);
+            }
+
+            return words;
+        }
+
+        VkShaderModuleCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        create_info.codeSize = words.size() * sizeof(std::uint32_t);
+        create_info.pCode = words.data();
+
+    bad_reinterpret_cast_shader_load:
+      why:
+        The code assumes arbitrary file bytes are suitably aligned for uint32_t access.
+      code: |
+        const std::uint32_t* words =
+            reinterpret_cast<const std::uint32_t*>(spirv_bytes.data());
+
+        VkShaderModuleCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        create_info.codeSize = spirv_bytes.size();
+        create_info.pCode = words;
+
+  push_constants:
+    summary:
+      Push constant layout should be explicit and shared between host and shader expectations.
+
+    good_explicit_push_constant_struct:
+      why:
+        The host-side structure is simple, bounded, and clearly associated with a pipeline range.
+      code: |
+        struct DrawPushConstants
+        {
+            float model_matrix[16];
+            std::uint32_t material_index;
+            std::uint32_t padding[3];
+        };
+
+        VkPushConstantRange range{};
+        range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        range.offset = 0;
+        range.size = sizeof(DrawPushConstants);
+
+    bad_implicit_layout_guess:
+      why:
+        The code assumes a convenient host layout is automatically compatible with shader expectations.
+      code: |
+        struct DrawPushConstants
+        {
+            glm::mat4 model;
+            bool selected;
+        };
+
   uploads_and_transfers:
     summary:
       Upload paths should be standardized, with explicit staging ownership and retirement.
