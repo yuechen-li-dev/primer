@@ -64,6 +64,30 @@ examples:
         def process_payload(payload: dict[str, Any]) -> Any:
             return payload.get("result")
 
+    good_protocol_boundary:
+      why:
+        Structural typing gives a clean behavioral boundary without forcing inheritance-heavy design.
+      code: |
+        from typing import Protocol
+
+        class TextWriter(Protocol):
+            def write(self, text: str) -> None:
+                ...
+
+        def emit_report(writer: TextWriter, text: str) -> None:
+            writer.write(text)
+
+    bad_abc_for_small_structural_need:
+      why:
+        Inheritance machinery is used where a simple behavioral protocol would be lighter and clearer.
+      code: |
+        from abc import ABC, abstractmethod
+
+        class TextWriterBase(ABC):
+            @abstractmethod
+            def write(self, text: str) -> None:
+                raise NotImplementedError
+
   data_shape:
     summary:
       Data shape must be obvious inside core logic.
@@ -120,6 +144,35 @@ examples:
 
         user = load_user()
         print(user[1])
+    
+    good_dataclass_post_init_validation:
+      why:
+        The type enforces a real invariant directly and locally.
+      code: |
+        from dataclasses import dataclass
+
+        @dataclass(frozen=True)
+        class PortNumber:
+            value: int
+
+            def __post_init__(self) -> None:
+                if not (0 < self.value < 65536):
+                    raise ValueError("port must be between 1 and 65535")
+
+    bad_dataclass_hidden_framework_behavior:
+      why:
+        The dataclass now performs too much hidden lifecycle work for an ordinary record type.
+      code: |
+        from dataclasses import dataclass
+
+        @dataclass
+        class UserConfig:
+            path: str
+
+            def __post_init__(self) -> None:
+                self._raw = load_global_state()
+                self._session = connect_to_service(self.path)
+                self._register_everything()
 
   functions_first:
     summary:
@@ -182,6 +235,28 @@ examples:
         class RectangleHelper:
             def compute(self, width: float, height: float) -> float:
                 return width * height
+
+  defaults_and_signatures:
+    summary:
+      Function defaults must not smuggle shared mutable state across calls.
+
+    good_none_default:
+      why:
+        A fresh list is created when needed, so calls do not share hidden state.
+      code: |
+        def append_name(name: str, names: list[str] | None = None) -> list[str]:
+            if names is None:
+                names = []
+            names.append(name)
+            return names
+
+    bad_mutable_default:
+      why:
+        State persists across calls in a way that looks innocent and behaves haunted.
+      code: |
+        def append_name(name: str, names: list[str] = []) -> list[str]:
+            names.append(name)
+            return names
 
   exceptions:
     summary:
