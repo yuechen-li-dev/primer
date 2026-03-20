@@ -245,6 +245,51 @@ examples:
             }
         }
 
+    good_no_unwrap_runtime_path:
+      why:
+        The function returns failure honestly instead of panicking on a plausible runtime condition.
+      code: |
+        fn first_name_upper(names: &[String]) -> Result<String, String> {
+            let first = names.first().ok_or_else(|| "no names available".to_string())?;
+            Ok(first.to_uppercase())
+        }
+
+    bad_unwrap_emotional_support:
+      why:
+        unwrap hides a plausible failure path behind a panic.
+      code: |
+        fn first_name_upper(names: &[String]) -> String {
+            names.first().unwrap().to_uppercase()
+        }
+
+  string_boundaries:
+    summary:
+      Borrow strings with &str and own strings with String. Do not get cute unless there is a real need.
+
+    good_borrowed_input_owned_field:
+      why:
+        The API borrows input efficiently while the struct owns its long-lived data.
+      code: |
+        struct UserRecord {
+            name: String,
+        }
+
+        impl UserRecord {
+            fn new(name: &str) -> Self {
+                Self {
+                    name: name.to_string(),
+                }
+            }
+        }
+
+    bad_overgeneric_string_api:
+      why:
+        The generic surface is heavier than the problem requires.
+      code: |
+        fn build_label<T: AsRef<str>>(name: T) -> String {
+            format!("label: {}", name.as_ref())
+        }
+
   structs_enums_and_traits:
     summary:
       Start concrete. Use traits only when there is a real interface boundary.
