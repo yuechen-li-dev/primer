@@ -65,6 +65,9 @@ recommended:
   - Prefer simple command recording phases with obvious boundaries.
   - Prefer explicit debug naming and validation-friendly diagnostics.
   - Prefer repository-established helper layers such as allocator or loader integrations when already adopted.
+  - Prefer explicit timestamp and query usage patterns when GPU timing is needed.
+  - Prefer explicit host-side SPIR-V loading patterns that respect byte alignment.
+  - Prefer explicit push constant layout discipline shared by host and shader code.
 
 not_recommended:
   - Raw VkDevice, VkCommandBuffer, or other core handles flowing through unrelated high-level systems.
@@ -90,6 +93,9 @@ restricted:
   - Multi-threaded command recording patterns are restricted unless the repository already standardizes them.
   - Async upload and lifetime tricks are restricted unless the architecture already provides them.
   - Unsafe interop edges and platform glue are restricted to narrow documented boundaries.
+  - Ad hoc timestamp query placement and readback policy are restricted.
+  - Unaligned SPIR-V typed reads from arbitrary byte buffers are restricted.
+  - Push constant layout assumptions without explicit host and shader agreement are restricted.
 
 default_patterns:
   backend_boundary:
@@ -147,6 +153,46 @@ default_patterns:
       - Keep resource transition and visibility rules in known locations.
       - Prefer explicit documented state-transition helpers when the repository uses them.
       - If synchronization is unclear, simplify the pass or resource model before adding more barriers.
+    guidance:
+       - Plausible-looking synchronization is not good enough.
+       - The repository should have a synchronization doctrine, not a pile of individually reasonable guesses.
+
+  timestamps_and_queries:
+    headline:
+      GPU timing and query usage must follow explicit recipes.
+    rules:
+      - Use a small number of repository-approved timestamp and query patterns.
+      - Record timestamps at stages that actually bracket the GPU work being measured.
+      - Reset queries according to a consistent backend policy before reuse.
+      - Do not read query results until the backend has established that the work is complete.
+      - Keep host-side timing semantics distinct from GPU-side timing semantics.
+    guidance:
+      - Plausible timestamps can still measure the wrong thing.
+      - If a timing path is unclear, simplify the measurement scope before adding more query logic.
+
+  shader_module_loading:
+    headline:
+      Shader loading must respect SPIR-V representation and alignment.
+    rules:
+      - Do not reinterpret arbitrary byte buffers as uint32_t words without proving alignment.
+      - Use a repository-approved SPIR-V loading path that produces correctly aligned code data.
+      - Keep shader-module creation policy centralized.
+      - Validate shader byte length and representation before module creation.
+    guidance:
+      - Shader loading is low-level code and low-level code must still be boring.
+      - A plausible cast is not a safe loading strategy.
+
+  push_constants:
+    headline:
+      Push constant layout must be explicit and shared between host and shader expectations.
+    rules:
+      - Keep push constant structs simple, explicit, and size-aware.
+      - Do not assume host struct layout is correct without matching shader-side layout rules.
+      - Centralize push constant range definitions where practical.
+      - Prefer one stable push constant recipe per pipeline family instead of many local variations.
+    guidance:
+      - Push constants are easy to make silently wrong.
+      - Layout discipline matters more than convenience here.
 
   uploads_and_transfers:
     headline:
