@@ -62,6 +62,7 @@ recommended:
   - Prefer owned structs by default.
   - Prefer passing references briefly instead of storing references long-term.
   - Prefer String over &str in owned data structures.
+  - Prefer &str for borrowed string inputs and String for owned string fields and returns.
   - Prefer Vec<T>, HashMap<K, V>, and other standard library collections when they fit naturally.
   - Prefer enums for variants and state machines.
   - Prefer plain functions and inherent impl methods over traits when no interface boundary is needed.
@@ -103,6 +104,7 @@ restricted:
   - Unsafe cell patterns and custom aliasing tricks are restricted.
   - Global mutable state is restricted.
   - Clever ownership wrappers invented only to satisfy one local borrow-checker complaint are restricted.
+  - unwrap and expect are restricted in normal library and application paths.
 
 default_patterns:
   ownership:
@@ -197,9 +199,23 @@ default_patterns:
       - Keep error types boring unless complexity is justified.
       - Do not hide failure in logs, globals, or side channels.
       - Do not build elaborate error hierarchies for small local modules.
+      - Do not use unwrap or expect as routine control flow.
     guidance:
       - Rust already has a good error story.
       - Use it plainly instead of inventing a more theatrical one.
+      - Panic should be rare and intentional.
+      
+  panic_and_unwrap_discipline:
+    headline:
+      Panics are escalation points, not ordinary flow control.
+    rules:
+      - Do not use unwrap or expect in ordinary runtime paths without a strong invariant reason.
+      - Prefer returning Result or Option instead of panicking on recoverable conditions.
+      - If a panic is used, the invariant should be obvious and local.
+      - Do not use expect to silence design uncertainty.
+    guidance:
+      - unwrap often acts like emotional support for incomplete reasoning.
+      - If failure is plausible, model it in the type instead of panicking.
 
   mutation_and_state:
     headline:
