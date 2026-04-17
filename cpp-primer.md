@@ -64,6 +64,7 @@ recommended:
   - Prefer straightforward control flow over abstraction-heavy indirection.
   - Prefer const when it clarifies intent and stabilizes interfaces.
   - Prefer narrow interfaces with explicit inputs and outputs.
+  - std::expected is allowed and preferred for fallible operations when callers need explicit error information.
 
 not_recommended:
   - Deep inheritance hierarchies.
@@ -97,6 +98,9 @@ restricted:
   - Unaligned typed reads from byte storage are banned.
   - Implicit narrowing conversions in normal code are restricted.
   - Silent signed and unsigned mixing is restricted.
+  - Explicit object parameters / "deducing this" are banned.
+    - Use ordinary member functions or ordinary free functions instead.
+  - std::mdspan is restricted. Do not use it unless the repository explicitly needs multidimensional non-owning views and the data-layout contract is documented locally.
 
 default_patterns:
   error_handling:
@@ -150,9 +154,11 @@ default_patterns:
       - Do not build mini-frameworks out of type traits and indirection.
       - Do not use template tricks where a normal function or class would be clearer.
       - Prefer ordinary overloads or simple specialization only when truly necessary.
+      - Do not move ordinary runtime logic into compile-time machinery without a clear, documented reason.
     guidance:
       - Templates are a tool for reducing obvious duplication.
       - They are not permission to turn the codebase into compile-time performance art.
+      - Prefer ordinary runtime code over constexpr cleverness.
 
   interfaces:
     headline:
