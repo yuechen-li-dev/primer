@@ -14,13 +14,13 @@ intent:
       human contributors
   non_goals:
     - This is not a general C++ tutorial.
-    - This is not a showcase of every valid C++20 feature.
+    - This is not a showcase of every valid C++20 or later feature.
     - This is not a license to invent a new house dialect.
     - This is not an excuse to import clever patterns from random C++ codebases.
 
 goal:
   headline:
-    Use boring, explicit, portable C++20 that keeps ownership, control flow, and runtime cost obvious.
+    Use boring, explicit, portable C++20 or later that keeps ownership, control flow, and runtime cost obvious.
   success_criteria:
     - Code is easy to review locally.
     - Refactors stay localized.
@@ -239,7 +239,7 @@ default_patterns:
 portability_rules:
   - Code must not depend on one compiler's extensions unless explicitly isolated and justified.
   - Do not assume platform-specific behavior without an abstraction boundary.
-  - Prefer portable standard C++20 facilities first.
+  - Prefer portable standard C++20 or later facilities first.
   - If non-portable code is truly required, isolate it behind a narrow boundary and document why.
   - Do not use vendor-specific behavior as a convenience shortcut in ordinary code.
 
