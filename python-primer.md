@@ -92,6 +92,8 @@ not_recommended:
   - Accumulating business logic inside lambdas, comprehensions, or chained expression soup.
   - Reusing dynamic JSON-shaped payloads deep into the application instead of normalizing them.
   - Naming that depends on cultural Python shorthand instead of plain meaning.
+  - Using ABC as a default tool for interface boundaries when typing.Protocol would be cleaner and structurally typed.
+  - Exposing all internal submodule names through __init__.py without an intentional public surface.
 
 restricted:
   - Dynamic attribute injection is restricted.

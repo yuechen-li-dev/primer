@@ -64,30 +64,36 @@ examples:
         def process_payload(payload: dict[str, Any]) -> Any:
             return payload.get("result")
 
+  protocols:
+    summary:
+      Use typing.Protocol for structural interface boundaries instead of ABC by default.
+
     good_protocol_boundary:
       why:
-        Structural typing gives a clean behavioral boundary without forcing inheritance-heavy design.
+        Protocol defines the interface without requiring inheritance. Callers stay decoupled.
       code: |
         from typing import Protocol
 
-        class TextWriter(Protocol):
-            def write(self, text: str) -> None:
-                ...
+        class FileReader(Protocol):
+            def read_text(self, path: str) -> str: ...
 
-        def emit_report(writer: TextWriter, text: str) -> None:
-            writer.write(text)
+        def process_config(reader: FileReader, path: str) -> str:
+            return reader.read_text(path).strip()
 
-    bad_abc_for_small_structural_need:
+    bad_abc_by_default:
       why:
-        Inheritance machinery is used where a simple behavioral protocol would be lighter and clearer.
+        ABC creates a nominal inheritance requirement without a concrete benefit here.
       code: |
         from abc import ABC, abstractmethod
 
-        class TextWriterBase(ABC):
+        class FileReader(ABC):
             @abstractmethod
-            def write(self, text: str) -> None:
-                raise NotImplementedError
+            def read_text(self, path: str) -> str: ...
 
+        class DiskReader(FileReader):
+            def read_text(self, path: str) -> str:
+                with open(path) as f:
+                    return f.read()
   data_shape:
     summary:
       Data shape must be obvious inside core logic.
@@ -238,7 +244,7 @@ examples:
 
   defaults_and_signatures:
     summary:
-      Function defaults must not smuggle shared mutable state across calls.
+      Mutable default arguments are shared across all calls. Never use them.
 
     good_none_default:
       why:
@@ -257,6 +263,17 @@ examples:
         def append_name(name: str, names: list[str] = []) -> list[str]:
             names.append(name)
             return names
+
+    good_none_sentinel:
+      why:
+        None signals no value was passed. A fresh list is created each call.
+      code: |
+        from typing import Optional
+
+        def append_tag(tags: Optional[list[str]] = None, new_tag: str = "") -> list[str]:
+            result = list(tags) if tags is not None else []
+            result.append(new_tag)
+            return result
 
   exceptions:
     summary:
