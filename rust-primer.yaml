@@ -3,7 +3,7 @@ document:
   format: yaml
   version: 2
   kind: language
-summary: Rust with owned state, expressive enums and traits, and explicit unsafe and async contracts.
+summary: Ownership-first Rust with short borrows, local lifetime contracts, and visible effects.
 uses:
   - common-primer.yaml
 baseline: >-
@@ -13,6 +13,20 @@ baseline: >-
   Examples use edition 2024 (Rust 1.85+); existing crates keep their declared edition.
 examples: rust-primer-examples.yaml
 rules:
+  - id: RS-OWNERSHIP-PLAN
+    level: requirement
+    scope: Retained relationships, public types, and deferred work
+    rule: >-
+      Choose the owner, transfer points, borrow duration, mutation authority, and
+      teardown order before implementing the relationship. Put nonobvious decisions
+      beside the owning type or API; ordinary local borrows need no separate design
+      document. Persistent domain state should own its data; borrow it temporarily
+      for operations. Use borrowed fields only for a real, stable owner relationship,
+      keeping lifetime parameters at that boundary. Prefer validated IDs/handles
+      when independently changing objects need retained links; define stale-handle
+      behavior. Do not let one borrow-checker error dictate the whole ownership graph.
+    reason: Prevents lifetimes and shared mutation from spreading through unrelated APIs and making later changes expensive.
+    verification: Trace creation, transfer, last use, mutation, and teardown; check that changing one owner does not require unrelated lifetime edits.
   - id: RS-ERRORS
     level: default
     scope: Fallible operations and absence
@@ -29,10 +43,13 @@ rules:
     rule: >-
       Use owned domain structs for retained state, &T/&mut T and slices for borrows,
       and explicit ownership transfer for retained work. Return borrows when the
-      relationship is useful and clear; lifetime parameters are a contract, not a
-      smell. Clone when independence is intended and cost is acceptable; do not
-      add broad cloning or Arc merely to silence a borrow-checker diagnostic.
-    reason: Keeps ownership and cost visible without forbidding ordinary idiomatic borrowing.
+      relationship is useful and clear. Keep &mut borrows short and split operations
+      into read/compute/update phases when that clarifies mutation. Lifetime
+      parameters describe a chosen relationship; avoid threading them through an
+      entire object graph. Clone when independence is intended and cost is acceptable;
+      do not add broad cloning, 'static bounds, Rc/RefCell, or Arc/Mutex merely to
+      silence a borrow-checker diagnostic. Reconsider the owning boundary first.
+    reason: Keeps ownership and cost local without forbidding useful borrowed APIs.
     verification: Compile intended borrow use and rejected escaping borrows; test ownership transfer and teardown.
   - id: RS-STATE
     level: default
@@ -54,6 +71,26 @@ rules:
       under locks, handle poisoning according to policy, and document atomic ordering.
     reason: Prevents deadlocks and runtime borrow panics that the ownership checker does not exclude.
     verification: Exercise overlap, reentrant access, poisoning/error policy, and owner shutdown as applicable.
+  - id: RS-LOCAL-EFFECTS
+    level: default
+    scope: Moves, captures, iteration, conversions, and guard lifetimes
+    rule: >-
+      Make consequential ownership and effects visible with named values, clear
+      signatures, and lexical scopes. Choose iter for shared borrowing, iter_mut
+      for exclusive borrowing, and into_iter when consuming an owned collection;
+      remember a borrowed receiver still yields borrowed items. Inspect closure
+      captures before deferring work: move transfers captured values, not ownership
+      of the referents of captured references. Distinguish copying a reference from
+      cloning its owned data and make pattern-binding types clear where retention
+      depends on them. Bind guards explicitly and use a
+      block or explicit drop before reentry or await; do not rely on subtle
+      temporary drop scopes. Keep custom Deref, overloaded operators, From/Into,
+      blanket trait implementations, and macros from hiding allocation, blocking,
+      mutation, or fallibility. Use named operations or TryFrom where those effects
+      matter. Keep ordinary lifetime elision, pattern matching, and ? when their
+      meaning is clear; explicitness is about consequential behavior, not syntax noise.
+    reason: Prevents correct-looking expressions from hiding the ownership or cleanup changes that make refactors risky.
+    verification: Review captures, receiver types, conversion implementations, and drop points; test callback reentry and intended move/borrow rejection.
   - id: RS-ASYNC
     level: requirement
     scope: Futures, spawned tasks, and cancellation
@@ -102,3 +139,7 @@ references:
     url: https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html
   - title: Rust Reference, behavior considered undefined
     url: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+  - title: Rust Reference, destructor and temporary scopes
+    url: https://doc.rust-lang.org/reference/destructors.html
+  - title: Rust Reference, type coercions
+    url: https://doc.rust-lang.org/reference/type-coercions.html

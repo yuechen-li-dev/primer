@@ -81,6 +81,14 @@ def reference(value: object, documents: dict[str, dict[str, object]], where: str
     return name
 
 
+def read_documents(root: Path) -> dict[str, dict[str, object]]:
+    documents: dict[str, dict[str, object]] = {}
+    for path in sorted(root.glob("*-primer*.yaml")):
+        source = path.read_text(encoding="utf-8")
+        documents[path.name] = load_document(source, path.name)
+    return documents
+
+
 def validate(documents: dict[str, dict[str, object]]) -> None:
     if not documents:
         raise ValidationError("no primer YAML documents found")
@@ -184,7 +192,10 @@ def command(args: Sequence[str], directory: Path, *, reject: str | None = None) 
     environment["PYTHONOPTIMIZE"] = "0"  # The runnable specimens deliberately assert behavior.
     environment["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
     try:
-        completed = subprocess.run(args, cwd=directory, env=environment, capture_output=True, text=True, timeout=120, check=False)
+        completed = subprocess.run(
+            args, cwd=directory, env=environment, capture_output=True,
+            text=True, timeout=120, check=False,
+        )
     except (OSError, subprocess.TimeoutExpired) as cause:
         raise ValidationError(f"could not execute {args[0]}: {cause}") from cause
     output = completed.stdout + completed.stderr
@@ -208,11 +219,19 @@ def execute(case: dict[str, object], directory: Path) -> None:
         resolved = shutil.which(compiler)
         if resolved is None:
             raise ValidationError(f"C++ compiler not found: {compiler}; CXX must name one executable")
-        command([resolved, "-std=c++23", "-Wall", "-Wextra", "-Wconversion", "-Werror", "-pedantic-errors", str(source), "-o", str(executable)], directory, reject=diagnostic)
+        arguments = [
+            resolved, "-std=c++23", "-Wall", "-Wextra", "-Wconversion", "-Werror",
+            "-pedantic-errors", str(source), "-o", str(executable),
+        ]
+        command(arguments, directory, reject=diagnostic)
     elif language == "rust":
         command(["rustc", "--edition=2024", "-D", "warnings", str(source), "-o", str(executable)], directory, reject=diagnostic)
     elif language == "python":
-        command([sys.executable, "-m", "mypy", "--strict", "--python-version", "3.10", "--no-incremental", "--cache-dir", str(directory / "mypy-cache"), str(source)], directory, reject=diagnostic)
+        arguments = [
+            sys.executable, "-m", "mypy", "--strict", "--python-version", "3.10",
+            "--no-incremental", "--cache-dir", str(directory / "mypy-cache"), str(source),
+        ]
+        command(arguments, directory, reject=diagnostic)
         if mode == "run":
             command([sys.executable, "-B", str(source)], directory)
         return
@@ -224,6 +243,7 @@ def execute(case: dict[str, object], directory: Path) -> None:
             '<LangVersion>14.0</LangVersion><Nullable>enable</Nullable>'
             '<TreatWarningsAsErrors>true</TreatWarningsAsErrors>'
             '<ImplicitUsings>disable</ImplicitUsings>'
+            '<JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>'
             '</PropertyGroup></Project>', encoding="utf-8")
         command(["dotnet", "build", str(project), "--nologo", "-v:q", "-m:1", "-nr:false", "-p:UseSharedCompilation=false"], directory, reject=diagnostic)
         if mode == "run":
@@ -239,10 +259,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     options = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     try:
-        documents = {path.name: load_document(path.read_text(encoding="utf-8"), path.name)
-                     for path in sorted(root.glob("*-primer*.yaml"))}
+        documents = read_documents(root)
         validate(documents)
-        rules = sum(len(items(value["rules"], name)) for name, value in documents.items() if "rules" in value)
+        rules = 0
+        for filename, content in documents.items():
+            if "rules" in content:
+                rules += len(items(content["rules"], filename))
         print(f"PASS: {len(documents)} YAML documents; {rules} rules; references and example classifications valid", flush=True)
         if not options.examples:
             print("Examples not executed (use --examples all).")
@@ -262,8 +284,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     directory = Path(temporary) / text(case["id"], "id")
                     directory.mkdir()
                     execute(case, directory)
-                    executed += case["mode"] == "run"
-                    rejected += case["mode"] in ("compile_fail", "type_fail")
+                    if case["mode"] == "run":
+                        executed += 1
+                    else:
+                        rejected += 1
                     print(f"PASS {case['mode']}: {case['id']}", flush=True)
         print(f"PASS: {executed} programs ran; {rejected} intended rejections; {illustrative} illustrative recipes not executed")
         print("Vulkan GPU execution, other compilers/ABIs, and unrepresented rule behavior are not qualified by these examples.")

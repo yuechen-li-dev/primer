@@ -17,9 +17,9 @@ examples. For Vulkan, also read the implementation language's profile.
 | Profile | Focus | Examples |
 | --- | --- | --- |
 | [C++](cpp-primer.yaml) | C++23, `std::expected`, RAII, concepts, lifetime and ABI contracts | [C++ examples](cpp-primer-examples.yaml) |
-| [C#](csharp-primer.yaml) | Nullability, domain types, disposal, owned async work | [C# examples](csharp-primer-examples.yaml) |
-| [Python](python-primer.yaml) | Static types plus runtime validation, resources and effects | [Python examples](python-primer-examples.yaml) |
-| [Rust](rust-primer.yaml) | Ownership, `Result`, enums, traits, unsafe and async contracts | [Rust examples](rust-primer-examples.yaml) |
+| [C#](csharp-primer.yaml) | Generated production infrastructure, nullability, disposal, owned async work | [C# examples](csharp-primer-examples.yaml) |
+| [Python](python-primer.yaml) | Function-first algorithms, canonical explicit forms, validated data, portable domain logic | [Python examples](python-primer-examples.yaml) |
+| [Rust](rust-primer.yaml) | Ownership decisions first, short borrows, local lifetimes and visible effects | [Rust examples](rust-primer-examples.yaml) |
 | [Vulkan overlay](vulkan-primer.yaml) | Device capabilities, GPU lifetime, synchronization, presentation | [Host checks and review recipe](vulkan-primer-examples.yaml) |
 
 Keep repository-specific architecture, build commands, supported targets, and
@@ -56,6 +56,22 @@ contract. A borrow's lifetime and a narrowing conversion's range still need proo
 The same goals use each language's own error and resource conventions; there is
 no requirement to build a common Result framework across languages.
 
+The profiles also make deliberate choices where language flexibility would work
+against those goals:
+
+- C# production infrastructure uses direct typed code or compile-time source
+  generation. Runtime reflection is limited to disposable prototypes, excluded
+  from production. Registration and serializers must not silently fall back to it.
+- Python starts with typed module-level functions and plain records. Use named loop
+  steps for nontrivial transforms, explicit branching and `None` handling, and
+  standard builtins for their direct jobs. Keep dynamic Python behavior at adapters
+  so the domain algorithm remains straightforward to port.
+- Rust chooses owners, transfer points, borrow extents, and teardown before building
+  retained relationships. Keep lifetime parameters local and make consequential
+  capture, iteration, conversion, and guard-drop behavior visible. Useful ordinary
+  Rust syntax stays available; solving a local borrow error must not force a new
+  ownership model across unrelated modules.
+
 ## Validate changes
 
 Use Python 3.10+ and an isolated environment:
@@ -91,6 +107,13 @@ YAML code**, so separate test copies cannot drift:
   An unrelated missing tool or SDK is not a passing negative test.
 - `illustrative`: visibly reported as unexecuted. These are review recipes, not
   runnable programs or qualification evidence.
+
+The C# fixtures disable default JSON reflection and test the SDK's source-generated
+metadata directly, including a compile rejection for a missing generated type.
+The Rust fixtures include owned work, guard release before callback reentry, and a
+compiler rejection showing that a `move` capture of a reference still borrows its
+referent. The Python fixtures exercise the canonical function/loop form with
+distinct absence, zero, and invalid boolean cases.
 
 CI runs these checks on Linux and Windows. The C++ example runner uses GCC; it
 does not establish MSVC/Clang, sanitizer, or ABI qualification. Host-only Vulkan

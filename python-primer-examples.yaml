@@ -52,16 +52,15 @@ cases:
       class Snapshot:
           values: tuple[int, ...]
 
-          @classmethod
-          def capture(cls, values: Iterable[int]) -> "Snapshot":
-              return cls(tuple(values))
+      def capture_snapshot(values: Iterable[int]) -> Snapshot:
+          return Snapshot(tuple(values))
 
       @dataclass
       class Batch:
           items: list[int] = field(default_factory=list)
 
       source = [1, 2]
-      snapshot = Snapshot.capture(source)
+      snapshot = capture_snapshot(source)
       source[0] = 99
       assert snapshot.values == (1, 2)
       first, second = Batch(), Batch()
@@ -91,6 +90,41 @@ cases:
           assert stream.closed
       else:
           raise AssertionError("failure was hidden")
+  - id: PY-CANONICAL-OPTIONAL-COUNTS
+    language: python
+    mode: run
+    demonstrates: [PY-CANONICAL, PY-STRUCTURE, PY-PORTABILITY]
+    description: Typed functions, named loop steps, explicit absence, and bounded integers translate directly to other languages.
+    code: |
+      from collections.abc import Sequence
+
+      def validate_count(value: int) -> None:
+          if isinstance(value, bool) or not 0 <= value <= 100:
+              raise ValueError("count must be an integer in [0, 100]")
+
+      def normalize_counts(values: Sequence[int | None], *, missing: int) -> list[int]:
+          validate_count(missing)
+          result: list[int] = []
+          for value in values:
+              if value is None:
+                  count = missing
+              else:
+                  count = value
+              validate_count(count)
+              result.append(count)
+          return result
+
+      source = [None, 0, 100]
+      assert normalize_counts(source, missing=5) == [5, 0, 100]
+      assert source == [None, 0, 100]
+      assert normalize_counts([], missing=5) == []
+      for invalid in (-1, 101, False):
+          try:
+              normalize_counts([invalid], missing=5)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("invalid count accepted")
   - id: PY-UNCHECKED-OBJECT
     language: python
     mode: type_fail

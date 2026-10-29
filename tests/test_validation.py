@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tools.validate import ValidationError, command, items, load_document, mapping, validate
+from tools.validate import ValidationError, command, items, load_document, mapping, read_documents, validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,8 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class Documents(unittest.TestCase):
     def setUp(self) -> None:
-        self.documents = {path.name: load_document(path.read_text(encoding="utf-8"), path.name)
-                          for path in ROOT.glob("*-primer*.yaml")}
+        self.documents = read_documents(ROOT)
 
     def test_current_corpus(self) -> None:
         validate(self.documents)

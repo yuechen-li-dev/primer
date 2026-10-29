@@ -3,7 +3,7 @@ document:
   format: yaml
   version: 2
   kind: language
-summary: Modern C# with honest nullability, explicit domain states, and owned async work.
+summary: Modern C# with generated infrastructure, honest nullability, and owned async work.
 uses:
   - common-primer.yaml
 baseline: >-
@@ -91,15 +91,31 @@ rules:
     verification: Compile examples and test empty input, repeated enumeration, duplicate keys, and unknown values.
   - id: CS-BOUNDARIES
     level: default
-    scope: Interfaces, generics, dependency injection, reflection, and serialization
+    scope: Interfaces, generics, dependency injection, and serialization
     rule: >-
       Prefer direct construction and composition where sufficient. Interfaces,
       constrained generics, DI, inheritance, and source generators are valid when
       they express real substitution or framework contracts. Keep registration and
-      resource ownership inspectable. Validate DTOs and version wire formats;
-      account for trimming/AOT when using reflection or dynamic code.
-    reason: Keeps runtime discovery and external data from creating hidden contracts.
+      resource ownership inspectable. Validate DTOs and version wire formats.
+      Follow CS-GENERATED for discovery, metadata, and dispatch infrastructure.
+    reason: Keeps composition and external data from creating hidden contracts.
     verification: Exercise actual composition/serialization paths and supported publish modes, including AOT if claimed.
+  - id: CS-GENERATED
+    level: requirement
+    scope: Application-owned infrastructure and production framework integration paths
+    rule: >-
+      Runtime reflection is for disposable prototypes only; never retain it as
+      production infrastructure. Use direct typed code for known operations and
+      compile-time source generation for registration, serialization metadata,
+      mapping, discovery, or dispatch that otherwise requires inspection. Do not
+      ship assembly scanning, reflective invocation, runtime code generation, or
+      reflection-based fallback paths. Select framework APIs that consume generated
+      metadata explicitly; disable reflection fallback where supported. Label and
+      exclude prototype reflection paths from production, replacing them before
+      shipping. If a dependency cannot support this contract, report the specific
+      integration gap rather than silently introducing permanent reflection.
+    reason: Makes missing wiring a build-time or explicit contract failure and keeps behavior discoverable during refactoring.
+    verification: Inspect composition and generated output; build and exercise the real path with fallback disabled and test missing registration.
 references:
   - title: C# collection expressions
     url: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/collection-expressions
@@ -107,3 +123,5 @@ references:
     url: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record
   - title: Task cancellation
     url: https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation
+  - title: Source-generated System.Text.Json metadata and reflection fallback control
+    url: https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation

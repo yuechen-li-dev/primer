@@ -73,6 +73,78 @@ cases:
           assert_eq!(work(&closed), Err("operation failed"));
           assert_eq!(closed.get(), 1);
       }
+  - id: RS-OWNED-WORK-SHORT-BORROW
+    language: rust
+    mode: run
+    demonstrates: [RS-OWNERSHIP-PLAN, RS-OWNERSHIP, RS-LOCAL-EFFECTS]
+    description: A queue owns its inputs; a short read/compute phase produces an independent command before mutation.
+    code: |
+      // Queue owns pending strings. Command owns the one string retained for later work.
+      // No reference or lifetime parameter crosses the command boundary.
+      use std::collections::VecDeque;
+      struct Queue { pending: VecDeque<String> }
+      struct Command { message: String }
+
+      fn next_command(queue: &mut Queue) -> Option<Command> {
+          let message = {
+              let first = queue.pending.front()?;
+              format!("execute: {first}")
+          };
+          queue.pending.pop_front()?;
+          Some(Command { message })
+      }
+
+      fn main() {
+          let command = {
+              let mut queue = Queue {
+                  pending: VecDeque::from([String::from("first"), String::from("second")])
+              };
+              let command = next_command(&mut queue).expect("test queue has a first entry");
+              assert_eq!(queue.pending, VecDeque::from([String::from("second")]));
+              command
+          };
+          assert_eq!(command.message, "execute: first");
+          let mut empty = Queue { pending: VecDeque::new() };
+          assert!(next_command(&mut empty).is_none());
+      }
+  - id: RS-SCOPED-GUARD-BEFORE-CALLBACK
+    language: rust
+    mode: run
+    demonstrates: [RS-LOCAL-EFFECTS, RS-SHARED-STATE]
+    description: An explicit block releases a real mutex guard before callback reentry.
+    code: |
+      use std::sync::Mutex;
+
+      fn update_then_notify(state: &Mutex<u32>, notify: impl FnOnce()) -> Result<(), &'static str> {
+          {
+              let mut guard = state.lock().map_err(|_| "state poisoned")?;
+              *guard = guard.checked_add(1).ok_or("counter overflow")?;
+          }
+          notify();
+          Ok(())
+      }
+
+      fn main() {
+          let state = Mutex::new(0);
+          let outcome = update_then_notify(&state, || {
+              let guard = state.try_lock().expect("callback must run after the update guard drops");
+              assert_eq!(*guard, 1);
+          });
+          assert_eq!(outcome, Ok(()));
+      }
+  - id: RS-MOVE-DOES-NOT-OWN-REFERENT
+    language: rust
+    mode: compile_fail
+    demonstrates: [RS-OWNERSHIP-PLAN, RS-LOCAL-EFFECTS]
+    description: Moving a borrowed str into a thread does not transfer ownership of its local String.
+    diagnostic: E0597
+    code: |
+      fn main() {
+          let owner = String::from("local owner");
+          let borrowed = owner.as_str();
+          let worker = std::thread::spawn(move || borrowed.len());
+          let _ = worker.join();
+      }
   - id: RS-ESCAPING-BORROW
     language: rust
     mode: compile_fail

@@ -75,6 +75,44 @@ cases:
           public int CloseCount { get; private set; }
           public void Dispose() => CloseCount++;
       }
+  - id: CS-GENERATED-JSON-METADATA
+    language: csharp
+    mode: run
+    demonstrates: [CS-GENERATED, CS-BOUNDARIES]
+    description: The SDK's JSON source generator supplies typed metadata; the fixture disables reflection fallback.
+    code: |
+      using System;
+      using System.Text.Json;
+      using System.Text.Json.Serialization;
+
+      if (JsonSerializer.IsReflectionEnabledByDefault)
+          throw new Exception("reflection fallback must be disabled in this fixture");
+      var original = new Job(7);
+      string json = JsonSerializer.Serialize(original, JobJsonContext.Default.Job);
+      Job restored = JsonSerializer.Deserialize(json, JobJsonContext.Default.Job)
+          ?? throw new Exception("missing job payload");
+      if (restored != original)
+          throw new Exception("generated metadata round trip changed the job");
+
+      internal sealed record Job(int Count);
+      [JsonSerializable(typeof(Job))]
+      internal partial class JobJsonContext : JsonSerializerContext { }
+  - id: CS-MISSING-GENERATED-METADATA
+    language: csharp
+    mode: compile_fail
+    demonstrates: [CS-GENERATED]
+    description: A missing generated type contract is a compile error, not a reason to fall back to reflection.
+    diagnostic: CS1061
+    code: |
+      using System;
+      using System.Text.Json;
+      using System.Text.Json.Serialization;
+
+      Console.WriteLine(JsonSerializer.Serialize(new Unregistered(7), JobJsonContext.Default.Unregistered));
+      internal sealed record Job(int Count);
+      internal sealed record Unregistered(int Count);
+      [JsonSerializable(typeof(Job))]
+      internal partial class JobJsonContext : JsonSerializerContext { }
   - id: CS-COLLECTION-WITHOUT-TARGET
     language: csharp
     mode: compile_fail
