@@ -1,0 +1,133 @@
+document:
+  name: csharp-primer-examples
+  format: yaml
+  version: 2
+  kind: examples
+profile: csharp-primer.yaml
+cases:
+  - id: CS-TARGET-TYPED-COLLECTION
+    language: csharp
+    mode: run
+    demonstrates: [CS-EXPRESSIONS, CS-ERRORS]
+    description: Target-typed collection literals and an ordinary Try parse boundary.
+    code: |
+      using System;
+      using System.Globalization;
+      static bool TryCount(string? text, out int value) =>
+          int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value)
+          && value is >= 0 and <= 100;
+      int[] supported = [0, 1, 100];
+      foreach (int candidate in supported)
+          if (!TryCount(candidate.ToString(CultureInfo.InvariantCulture), out int parsed) || parsed != candidate)
+              throw new Exception("valid count rejected");
+      foreach (string? invalid in new string?[] { null, "", "-1", "101", "12x" })
+          if (TryCount(invalid, out _)) throw new Exception("invalid count accepted");
+  - id: CS-OWNED-SNAPSHOT
+    language: csharp
+    mode: run
+    demonstrates: [CS-DATA, CS-NULLABILITY]
+    description: Copy mutable input instead of assuming a record or read-only interface freezes its contents.
+    code: |
+      using System;
+      using System.Collections.Generic;
+      int[] source = [1, 2];
+      var snapshot = new Snapshot(source);
+      source[0] = 99;
+      if (snapshot.Values[0] != 1) throw new Exception("input alias changed snapshot");
+      if (snapshot.Values is IList<int> mutable) {
+          try { mutable[0] = 9; throw new Exception("snapshot was writable"); }
+          catch (NotSupportedException) { }
+      }
+      try { _ = new Snapshot(null!); throw new Exception("null accepted"); }
+      catch (ArgumentNullException) { }
+      sealed class Snapshot {
+          public IReadOnlyList<int> Values { get; }
+          public Snapshot(int[] values) {
+              ArgumentNullException.ThrowIfNull(values);
+              Values = Array.AsReadOnly((int[])values.Clone());
+          }
+      }
+  - id: CS-CANCELLATION-DISPOSES
+    language: csharp
+    mode: run
+    demonstrates: [CS-ASYNC, CS-RESOURCES]
+    description: Deterministic in-flight cancellation remains cancellation and disposes the owned resource.
+    code: |
+      using System;
+      using System.Threading;
+      using System.Threading.Tasks;
+      using var cancel = new CancellationTokenSource();
+      var resource = new Tracked();
+      var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+      Task pending = Work(resource, entered, cancel.Token);
+      await entered.Task;
+      cancel.Cancel();
+      try { await pending; throw new Exception("cancellation reported as success"); }
+      catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
+      if (!pending.IsCanceled || resource.CloseCount != 1) throw new Exception("bad cancellation cleanup");
+      static async Task Work(Tracked owned, TaskCompletionSource entered, CancellationToken token) {
+          using (owned) {
+              entered.SetResult();
+              await Task.Delay(Timeout.Infinite, token);
+          }
+      }
+      sealed class Tracked : IDisposable {
+          public int CloseCount { get; private set; }
+          public void Dispose() => CloseCount++;
+      }
+  - id: CS-GENERATED-JSON-METADATA
+    language: csharp
+    mode: run
+    demonstrates: [CS-GENERATED, CS-BOUNDARIES]
+    description: The SDK's JSON source generator supplies typed metadata; the fixture disables reflection fallback.
+    code: |
+      using System;
+      using System.Text.Json;
+      using System.Text.Json.Serialization;
+
+      if (JsonSerializer.IsReflectionEnabledByDefault)
+          throw new Exception("reflection fallback must be disabled in this fixture");
+      var original = new Job(7);
+      string json = JsonSerializer.Serialize(original, JobJsonContext.Default.Job);
+      Job restored = JsonSerializer.Deserialize(json, JobJsonContext.Default.Job)
+          ?? throw new Exception("missing job payload");
+      if (restored != original)
+          throw new Exception("generated metadata round trip changed the job");
+
+      internal sealed record Job(int Count);
+      [JsonSerializable(typeof(Job))]
+      internal partial class JobJsonContext : JsonSerializerContext { }
+  - id: CS-MISSING-GENERATED-METADATA
+    language: csharp
+    mode: compile_fail
+    demonstrates: [CS-GENERATED]
+    description: A missing generated type contract is a compile error, not a reason to fall back to reflection.
+    diagnostic: CS1061
+    code: |
+      using System;
+      using System.Text.Json;
+      using System.Text.Json.Serialization;
+
+      Console.WriteLine(JsonSerializer.Serialize(new Unregistered(7), JobJsonContext.Default.Unregistered));
+      internal sealed record Job(int Count);
+      internal sealed record Unregistered(int Count);
+      [JsonSerializable(typeof(Job))]
+      internal partial class JobJsonContext : JsonSerializerContext { }
+  - id: CS-COLLECTION-WITHOUT-TARGET
+    language: csharp
+    mode: compile_fail
+    demonstrates: [CS-EXPRESSIONS]
+    description: Regression for the former primer's invalid var collection expression.
+    diagnostic: CS9176
+    code: |
+      var supported = [1, 2, 3];
+      System.Console.WriteLine(supported);
+  - id: CS-NULLABLE-DEREFERENCE
+    language: csharp
+    mode: compile_fail
+    demonstrates: [CS-NULLABILITY]
+    description: Nullable warnings are errors in the example build.
+    diagnostic: CS8602
+    code: |
+      string? text = System.Environment.GetEnvironmentVariable("PRIMER_UNSET_VALUE");
+      System.Console.WriteLine(text.Length);

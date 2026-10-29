@@ -1,0 +1,140 @@
+document:
+  name: python-primer
+  format: yaml
+  version: 2
+  kind: language
+summary: Function-first Python with canonical explicit control flow, validated data, and portable domain logic.
+uses:
+  - common-primer.yaml
+baseline: >-
+  Declare supported Python versions in project metadata and use their stable syntax
+  and library APIs. Use the repository's formatter, linter, and type checker; enable
+  strict checking for new typed modules. Examples intentionally work on Python 3.10+;
+  TaskGroup needs 3.11+. Adopt newer features when the supported baseline permits them.
+examples: python-primer-examples.yaml
+rules:
+  - id: PY-TYPES
+    level: requirement
+    scope: Public APIs and untrusted data
+    rule: >-
+      Annotate parameters and results with concrete domain types; keep Any at
+      explicitly dynamic boundaries and narrow object before use. TypedDict,
+      Protocol, annotations, and cast do not validate runtime values. Validate
+      decoded payloads before creating typed domain objects, including bool versus
+      int and nonfinite floats where relevant. Do not blanket-ignore type errors.
+    reason: Python executes unchecked values regardless of the declared type.
+    verification: Run a type checker and runtime tests against malformed values that annotations cannot reject.
+  - id: PY-DATA
+    level: default
+    scope: Data models and function signatures
+    rule: >-
+      Use dataclasses or existing validation models for fixed shape, enums for
+      distinct states, and dictionaries for genuinely dynamic keys. Validate domain
+      invariants at construction. frozen dataclasses are shallow; normalize mutable
+      inputs when an immutable snapshot is promised. Use default_factory or None
+      for per-call mutable defaults and keyword-only parameters for ambiguous options.
+    reason: Prevents accidental shared mutation and partially described dictionary protocols.
+    verification: Test invalid construction, alias mutation, independent defaults, and missing/extra fields.
+  - id: PY-ERRORS
+    level: requirement
+    scope: Exceptions and operation outcomes
+    rule: >-
+      Use ordinary typed exceptions with useful context; catch the narrow class
+      the boundary can handle and chain translated exceptions with raise ... from.
+      Use None for documented absence, not every failure. Do not swallow errors or
+      catch BaseException routinely. Retry only identified transient failures with
+      bounded attempts, timeout, and idempotency considered.
+    reason: Prevents misleading empty output and failures detached from their original cause.
+    verification: Test success, expected absence, malformed input, operational failure, and preserved exception causes.
+  - id: PY-RESOURCES
+    level: requirement
+    scope: Files, locks, transactions, subprocesses, and generators
+    rule: >-
+      Use with/async with or explicit try/finally for owned resources. Define
+      transaction commit/rollback and partial-output behavior. Use pathlib for
+      paths; specify encoding and serialization contracts. Avoid shell interpolation
+      for subprocess arguments and set timeouts where work can hang.
+    reason: Prevents leaks, ambiguous partial writes, and command injection.
+    verification: Exercise failure after acquisition, cleanup, timeout, and representative path/encoding cases.
+  - id: PY-STRUCTURE
+    level: default
+    scope: Functions, objects, protocols, decorators, and imports
+    rule: >-
+      Write module-level typed functions first, with explicit inputs, outputs, and
+      dependencies. Use dataclasses for records and classes only for actual lifecycle,
+      invariants, or required framework interfaces; avoid method-only namespaces,
+      stateless service hierarchies, and classmethod factories for simple transforms.
+      Keep validation/transformation separate from I/O. Use Protocol at a real seam.
+      Keep custom decorators and dynamic discovery in narrow framework adapters;
+      domain behavior uses named function calls and ordinary data declarations.
+      Keep import-time I/O and ambient environment reads out of libraries.
+    reason: Keeps behavior visible in ordinary calls and avoids object or metaprogramming scaffolding that raises porting cost.
+    verification: Trace a domain operation as typed function calls; import modules in a clean process and exercise actual adapters.
+  - id: PY-CANONICAL
+    level: default
+    scope: Choosing among equivalent Python implementations
+    rule: >-
+      Use a for loop with named intermediate values and append/assignment for
+      nontrivial collection transforms; use builtins such as sorted, sum, and
+      enumerate for their direct jobs. A flat comprehension is acceptable for one
+      pure projection or filter. Prefer if/elif and early returns for branching,
+      named def functions for reused logic, and explicit is None checks for absence.
+      Use mapping[key] for required fields and get only when absence is intentional.
+      Do not substitute map/filter/reduce chains, nested comprehensions, chained
+      ternaries, walrus side effects, truthiness-based defaulting, or dense lambda
+      expressions for these canonical forms. Keep one established implementation
+      style for the same operation rather than offering a menu of equivalent idioms.
+    reason: Reduces the Python-specific semantics a reader or future port must reconstruct.
+    verification: Review branch, evaluation, and mutation order directly; test empty collections, zero, False, and None distinctly.
+  - id: PY-PORTABILITY
+    level: default
+    scope: Domain algorithms that may later move to another language
+    rule: >-
+      Express domain work as typed records plus explicit algorithms over ordinary
+      collections. Keep dependencies, reflection, monkeypatching, dynamic attributes,
+      descriptors, and dunder-based behavior out of the domain path unless the
+      contract truly requires them; isolate such needs in an adapter. Declare
+      ordering, numeric range/units, equality, mutation, and failure semantics rather
+      than depending on arbitrary-precision integers, duck typing, or implicit
+      coercions for correctness. Do not introduce a portability framework or
+      reimplement a suitable library; keep the algorithm's assumptions legible.
+    reason: Limits future ports to translating explicit behavior rather than rediscovering Python runtime conventions.
+    verification: Walk through the algorithm in plain control flow and test numeric bounds, ordering, aliases, and malformed inputs.
+  - id: PY-CONCURRENCY
+    level: requirement
+    scope: Async tasks, threads, processes, and shared mutable state
+    rule: >-
+      Use async for asynchronous work with an owned task lifetime; prefer TaskGroup
+      on supported versions. Propagate CancelledError after cleanup and bound task
+      fan-out. Keep blocking work off the event loop. The GIL is not an application
+      synchronization contract; define locking or message ownership for shared state
+      and shutdown for executors and worker processes.
+    reason: Prevents orphan tasks, silent cancellation, blocked event loops, and race-prone mutation.
+    verification: Test cancellation, task failure propagation, bounded concurrency, and worker teardown.
+  - id: PY-ITERATION
+    level: default
+    scope: Comprehensions, iterators, and performance
+    rule: >-
+      Follow PY-CANONICAL for collection transforms. Return materialized collections
+      by default; use generators when streaming is part of the contract and make
+      single-pass consumption and lazy resource lifetimes explicit. Measure
+      algorithmic and allocation costs before adding caching or vectorized/native
+      paths; bound caches and preserve semantics across optimized paths.
+    reason: Prevents concise expressions and caches from hiding effects or unbounded memory growth.
+    verification: Test empty/repeated consumption and compare optimized behavior on representative inputs.
+  - id: PY-NOTEBOOKS
+    level: requirement
+    scope: Notebooks and experiments
+    rule: >-
+      Make data sources, dependencies, random seeds, and execution order explicit.
+      Move reused production logic into importable modules. A fresh-kernel run from
+      top to bottom must reproduce the claimed result; do not depend on hidden cells.
+    reason: Prevents saved output from being mistaken for reproducible execution.
+    verification: Execute from a clean kernel/environment and retain the inputs and artifacts needed for the claim.
+references:
+  - title: Python typing and runtime limits
+    url: https://docs.python.org/3/library/typing.html
+  - title: Dataclasses
+    url: https://docs.python.org/3/library/dataclasses.html
+  - title: Async tasks and cancellation
+    url: https://docs.python.org/3/library/asyncio-task.html

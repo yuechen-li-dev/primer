@@ -1,0 +1,145 @@
+document:
+  name: rust-primer
+  format: yaml
+  version: 2
+  kind: language
+summary: Ownership-first Rust with short borrows, local lifetime contracts, and visible effects.
+uses:
+  - common-primer.yaml
+baseline: >-
+  Use a supported stable toolchain and declare the crate's edition and MSRV.
+  Check both MSRV and the supported stable toolchain when promised. Use rustfmt,
+  compiler warnings, and relevant Clippy lints without blanket suppression.
+  Examples use edition 2024 (Rust 1.85+); existing crates keep their declared edition.
+examples: rust-primer-examples.yaml
+rules:
+  - id: RS-OWNERSHIP-PLAN
+    level: requirement
+    scope: Retained relationships, public types, and deferred work
+    rule: >-
+      Choose the owner, transfer points, borrow duration, mutation authority, and
+      teardown order before implementing the relationship. Put nonobvious decisions
+      beside the owning type or API; ordinary local borrows need no separate design
+      document. Persistent domain state should own its data; borrow it temporarily
+      for operations. Use borrowed fields only for a real, stable owner relationship,
+      keeping lifetime parameters at that boundary. Prefer validated IDs/handles
+      when independently changing objects need retained links; define stale-handle
+      behavior. Do not let one borrow-checker error dictate the whole ownership graph.
+    reason: Prevents lifetimes and shared mutation from spreading through unrelated APIs and making later changes expensive.
+    verification: Trace creation, transfer, last use, mutation, and teardown; check that changing one owner does not require unrelated lifetime edits.
+  - id: RS-ERRORS
+    level: default
+    scope: Fallible operations and absence
+    rule: >-
+      Use Result<T, E> for failure, Option<T> for absence, and ? for clear
+      propagation. Use domain error enums where callers distinguish outcomes and
+      add context at boundaries. Handle must_use results; logging is not handling.
+      Reserve unwrap/expect for a local invariant with a reason, not external input.
+    reason: Keeps the error alternative and its handling visible in the type and call site.
+    verification: Exercise success, absence, each error alternative, propagation, and invariant assumptions.
+  - id: RS-OWNERSHIP
+    level: default
+    scope: API ownership and borrowing
+    rule: >-
+      Use owned domain structs for retained state, &T/&mut T and slices for borrows,
+      and explicit ownership transfer for retained work. Return borrows when the
+      relationship is useful and clear. Keep &mut borrows short and split operations
+      into read/compute/update phases when that clarifies mutation. Lifetime
+      parameters describe a chosen relationship; avoid threading them through an
+      entire object graph. Clone when independence is intended and cost is acceptable;
+      do not add broad cloning, 'static bounds, Rc/RefCell, or Arc/Mutex merely to
+      silence a borrow-checker diagnostic. Reconsider the owning boundary first.
+    reason: Keeps ownership and cost local without forbidding useful borrowed APIs.
+    verification: Compile intended borrow use and rejected escaping borrows; test ownership transfer and teardown.
+  - id: RS-STATE
+    level: default
+    scope: Domain states, traits, generics, and dispatch
+    rule: >-
+      Use enums and exhaustive matches for alternatives, newtypes for distinct
+      values, and constructors for invariants. Use generics/traits for real shared
+      behavior and dyn Trait for needed runtime heterogeneity. Prefer composition
+      and direct data flow; avoid speculative blanket implementations and global registries.
+    reason: Makes invalid combinations and dispatch contracts visible to the compiler and reviewer.
+    verification: Test transitions and invalid construction; compile consumers against the public trait bounds.
+  - id: RS-SHARED-STATE
+    level: requirement
+    scope: Interior mutability and concurrent access
+    rule: >-
+      Use Rc/RefCell for deliberate single-thread shared mutation and Arc with
+      appropriate synchronization for cross-thread state. Arc supplies shared
+      lifetime, not mutation safety. Keep lock/borrow scopes short, avoid callbacks
+      under locks, handle poisoning according to policy, and document atomic ordering.
+    reason: Prevents deadlocks and runtime borrow panics that the ownership checker does not exclude.
+    verification: Exercise overlap, reentrant access, poisoning/error policy, and owner shutdown as applicable.
+  - id: RS-LOCAL-EFFECTS
+    level: default
+    scope: Moves, captures, iteration, conversions, and guard lifetimes
+    rule: >-
+      Make consequential ownership and effects visible with named values, clear
+      signatures, and lexical scopes. Choose iter for shared borrowing, iter_mut
+      for exclusive borrowing, and into_iter when consuming an owned collection;
+      remember a borrowed receiver still yields borrowed items. Inspect closure
+      captures before deferring work: move transfers captured values, not ownership
+      of the referents of captured references. Distinguish copying a reference from
+      cloning its owned data and make pattern-binding types clear where retention
+      depends on them. Bind guards explicitly and use a
+      block or explicit drop before reentry or await; do not rely on subtle
+      temporary drop scopes. Keep custom Deref, overloaded operators, From/Into,
+      blanket trait implementations, and macros from hiding allocation, blocking,
+      mutation, or fallibility. Use named operations or TryFrom where those effects
+      matter. Keep ordinary lifetime elision, pattern matching, and ? when their
+      meaning is clear; explicitness is about consequential behavior, not syntax noise.
+    reason: Prevents correct-looking expressions from hiding the ownership or cleanup changes that make refactors risky.
+    verification: Review captures, receiver types, conversion implementations, and drop points; test callback reentry and intended move/borrow rejection.
+  - id: RS-ASYNC
+    level: requirement
+    scope: Futures, spawned tasks, and cancellation
+    rule: >-
+      Give tasks an owner and join/error path, bound fan-out, and choose the runtime
+      deliberately. Do not hold synchronous locks across await or block the executor.
+      Dropping a future cancels polling, not necessarily external work or a spawned
+      task; define cancellation safety and commit points. Observe task failures at shutdown.
+    reason: Prevents work and side effects from silently outliving their caller.
+    verification: Test dropped futures, in-flight cancellation, child failure, overload, and runtime teardown.
+  - id: RS-UNSAFE
+    level: requirement
+    scope: Unsafe blocks, unsafe APIs, FFI, and Pin abstractions
+    rule: >-
+      Prefer safe APIs. Isolate necessary unsafe code and document each SAFETY
+      argument covering validity, alignment, aliasing, initialization, and lifetime.
+      Safe wrappers must enforce their preconditions for every safe caller; unsafe
+      public APIs need a Safety contract. Use established Pin abstractions for
+      self-referential futures rather than hand-rolled pointer invariants. Define
+      panic/unwind behavior at FFI boundaries and never unwind through an incompatible ABI.
+    reason: unsafe transfers proof obligations to the author rather than disabling them.
+    verification: Review all safe entry points; run focused tests and Miri/sanitizers where supported, plus real FFI checks.
+  - id: RS-RESOURCES
+    level: requirement
+    scope: Drop, I/O, transactions, and explicit finalization
+    rule: >-
+      Use RAII for release, but make fallible flush/commit/close operations explicit
+      when success matters; Drop cannot return errors. Destructors must avoid
+      panicking during unwinding. Specify state after partial I/O and transaction failure.
+    reason: Destruction alone cannot establish that an external operation completed successfully.
+    verification: Test failed finalization and early-return cleanup, including partially completed operations.
+  - id: RS-ITERATION
+    level: default
+    scope: Iterators, conversions, and performance
+    rule: >-
+      Use iterator adapters for clear transformations and loops for stateful control
+      flow. Make lazy consumption and allocations explicit. Use checked arithmetic
+      or try_from when overflow/narrowing would violate the domain; debug overflow
+      checks do not define release behavior. Optimize from measured workloads.
+    reason: Prevents compact iteration and casts from hiding costs or lossy semantics.
+    verification: Test empty input, maximum values, failed conversions, and relevant debug/release behavior.
+references:
+  - title: Rust error handling
+    url: https://doc.rust-lang.org/book/ch09-00-error-handling.html
+  - title: Unsafe Rust
+    url: https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html
+  - title: Rust Reference, behavior considered undefined
+    url: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+  - title: Rust Reference, destructor and temporary scopes
+    url: https://doc.rust-lang.org/reference/destructors.html
+  - title: Rust Reference, type coercions
+    url: https://doc.rust-lang.org/reference/type-coercions.html
