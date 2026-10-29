@@ -1,0 +1,104 @@
+document:
+  name: python-primer-examples
+  format: yaml
+  version: 2
+  kind: examples
+profile: python-primer.yaml
+cases:
+  - id: PY-VALIDATED-DOMAIN
+    language: python
+    mode: run
+    demonstrates: [PY-TYPES, PY-DATA]
+    description: Runtime validation rejects bool, wrong shape, and invalid ranges before constructing a domain value.
+    code: |
+      from dataclasses import dataclass
+
+      @dataclass(frozen=True)
+      class Count:
+          value: int
+
+          def __post_init__(self) -> None:
+              if type(self.value) is not int or not 0 <= self.value <= 100:
+                  raise ValueError("count must be an integer in [0, 100]")
+
+      def decode_count(payload: object) -> Count:
+          if not isinstance(payload, dict) or set(payload) != {"count"}:
+              raise ValueError("expected exactly one count field")
+          value: object = payload["count"]
+          if not isinstance(value, int) or isinstance(value, bool):
+              raise ValueError("count must be an integer")
+          return Count(value)
+
+      assert decode_count({"count": 0}) == Count(0)
+      assert decode_count({"count": 100}) == Count(100)
+      invalid_payloads: list[object] = [{}, {"count": True}, {"count": "2"}, {"count": -1}, {"count": 101}, []]
+      for invalid in invalid_payloads:
+          try:
+              decode_count(invalid)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError(f"invalid payload accepted: {invalid!r}")
+  - id: PY-INDEPENDENT-SNAPSHOT
+    language: python
+    mode: run
+    demonstrates: [PY-DATA]
+    description: Frozen state owns a tuple snapshot and mutable defaults belong to each instance.
+    code: |
+      from dataclasses import dataclass, field
+      from collections.abc import Iterable
+
+      @dataclass(frozen=True)
+      class Snapshot:
+          values: tuple[int, ...]
+
+          @classmethod
+          def capture(cls, values: Iterable[int]) -> "Snapshot":
+              return cls(tuple(values))
+
+      @dataclass
+      class Batch:
+          items: list[int] = field(default_factory=list)
+
+      source = [1, 2]
+      snapshot = Snapshot.capture(source)
+      source[0] = 99
+      assert snapshot.values == (1, 2)
+      first, second = Batch(), Batch()
+      first.items.append(1)
+      assert second.items == []
+  - id: PY-CLEANUP-AND-CAUSE
+    language: python
+    mode: run
+    demonstrates: [PY-ERRORS, PY-RESOURCES]
+    description: A real temporary file closes during error translation without losing the cause.
+    code: |
+      from tempfile import TemporaryFile
+      class DecodeError(Exception):
+          pass
+
+      stream = TemporaryFile(mode="w+t", encoding="utf-8")
+      try:
+          with stream:
+              stream.write("invalid")
+              stream.seek(0)
+              try:
+                  int(stream.read())
+              except ValueError as cause:
+                  raise DecodeError("temporary payload has no integer") from cause
+      except DecodeError as failure:
+          assert isinstance(failure.__cause__, ValueError)
+          assert stream.closed
+      else:
+          raise AssertionError("failure was hidden")
+  - id: PY-UNCHECKED-OBJECT
+    language: python
+    mode: type_fail
+    demonstrates: [PY-TYPES]
+    description: A typed boundary rejects unknown input until it is narrowed and validated.
+    diagnostic: arg-type
+    code: |
+      def count(value: int) -> int:
+          return value
+      payload: object = "unvalidated"
+      count(payload)

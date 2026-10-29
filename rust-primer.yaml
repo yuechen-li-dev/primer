@@ -1,0 +1,104 @@
+document:
+  name: rust-primer
+  format: yaml
+  version: 2
+  kind: language
+summary: Rust with owned state, expressive enums and traits, and explicit unsafe and async contracts.
+uses:
+  - common-primer.yaml
+baseline: >-
+  Use a supported stable toolchain and declare the crate's edition and MSRV.
+  Check both MSRV and the supported stable toolchain when promised. Use rustfmt,
+  compiler warnings, and relevant Clippy lints without blanket suppression.
+  Examples use edition 2024 (Rust 1.85+); existing crates keep their declared edition.
+examples: rust-primer-examples.yaml
+rules:
+  - id: RS-ERRORS
+    level: default
+    scope: Fallible operations and absence
+    rule: >-
+      Use Result<T, E> for failure, Option<T> for absence, and ? for clear
+      propagation. Use domain error enums where callers distinguish outcomes and
+      add context at boundaries. Handle must_use results; logging is not handling.
+      Reserve unwrap/expect for a local invariant with a reason, not external input.
+    reason: Keeps the error alternative and its handling visible in the type and call site.
+    verification: Exercise success, absence, each error alternative, propagation, and invariant assumptions.
+  - id: RS-OWNERSHIP
+    level: default
+    scope: API ownership and borrowing
+    rule: >-
+      Use owned domain structs for retained state, &T/&mut T and slices for borrows,
+      and explicit ownership transfer for retained work. Return borrows when the
+      relationship is useful and clear; lifetime parameters are a contract, not a
+      smell. Clone when independence is intended and cost is acceptable; do not
+      add broad cloning or Arc merely to silence a borrow-checker diagnostic.
+    reason: Keeps ownership and cost visible without forbidding ordinary idiomatic borrowing.
+    verification: Compile intended borrow use and rejected escaping borrows; test ownership transfer and teardown.
+  - id: RS-STATE
+    level: default
+    scope: Domain states, traits, generics, and dispatch
+    rule: >-
+      Use enums and exhaustive matches for alternatives, newtypes for distinct
+      values, and constructors for invariants. Use generics/traits for real shared
+      behavior and dyn Trait for needed runtime heterogeneity. Prefer composition
+      and direct data flow; avoid speculative blanket implementations and global registries.
+    reason: Makes invalid combinations and dispatch contracts visible to the compiler and reviewer.
+    verification: Test transitions and invalid construction; compile consumers against the public trait bounds.
+  - id: RS-SHARED-STATE
+    level: requirement
+    scope: Interior mutability and concurrent access
+    rule: >-
+      Use Rc/RefCell for deliberate single-thread shared mutation and Arc with
+      appropriate synchronization for cross-thread state. Arc supplies shared
+      lifetime, not mutation safety. Keep lock/borrow scopes short, avoid callbacks
+      under locks, handle poisoning according to policy, and document atomic ordering.
+    reason: Prevents deadlocks and runtime borrow panics that the ownership checker does not exclude.
+    verification: Exercise overlap, reentrant access, poisoning/error policy, and owner shutdown as applicable.
+  - id: RS-ASYNC
+    level: requirement
+    scope: Futures, spawned tasks, and cancellation
+    rule: >-
+      Give tasks an owner and join/error path, bound fan-out, and choose the runtime
+      deliberately. Do not hold synchronous locks across await or block the executor.
+      Dropping a future cancels polling, not necessarily external work or a spawned
+      task; define cancellation safety and commit points. Observe task failures at shutdown.
+    reason: Prevents work and side effects from silently outliving their caller.
+    verification: Test dropped futures, in-flight cancellation, child failure, overload, and runtime teardown.
+  - id: RS-UNSAFE
+    level: requirement
+    scope: Unsafe blocks, unsafe APIs, FFI, and Pin abstractions
+    rule: >-
+      Prefer safe APIs. Isolate necessary unsafe code and document each SAFETY
+      argument covering validity, alignment, aliasing, initialization, and lifetime.
+      Safe wrappers must enforce their preconditions for every safe caller; unsafe
+      public APIs need a Safety contract. Use established Pin abstractions for
+      self-referential futures rather than hand-rolled pointer invariants. Define
+      panic/unwind behavior at FFI boundaries and never unwind through an incompatible ABI.
+    reason: unsafe transfers proof obligations to the author rather than disabling them.
+    verification: Review all safe entry points; run focused tests and Miri/sanitizers where supported, plus real FFI checks.
+  - id: RS-RESOURCES
+    level: requirement
+    scope: Drop, I/O, transactions, and explicit finalization
+    rule: >-
+      Use RAII for release, but make fallible flush/commit/close operations explicit
+      when success matters; Drop cannot return errors. Destructors must avoid
+      panicking during unwinding. Specify state after partial I/O and transaction failure.
+    reason: Destruction alone cannot establish that an external operation completed successfully.
+    verification: Test failed finalization and early-return cleanup, including partially completed operations.
+  - id: RS-ITERATION
+    level: default
+    scope: Iterators, conversions, and performance
+    rule: >-
+      Use iterator adapters for clear transformations and loops for stateful control
+      flow. Make lazy consumption and allocations explicit. Use checked arithmetic
+      or try_from when overflow/narrowing would violate the domain; debug overflow
+      checks do not define release behavior. Optimize from measured workloads.
+    reason: Prevents compact iteration and casts from hiding costs or lossy semantics.
+    verification: Test empty input, maximum values, failed conversions, and relevant debug/release behavior.
+references:
+  - title: Rust error handling
+    url: https://doc.rust-lang.org/book/ch09-00-error-handling.html
+  - title: Unsafe Rust
+    url: https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html
+  - title: Rust Reference, behavior considered undefined
+    url: https://doc.rust-lang.org/reference/behavior-considered-undefined.html

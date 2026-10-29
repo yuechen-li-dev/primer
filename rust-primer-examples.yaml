@@ -1,0 +1,96 @@
+document:
+  name: rust-primer-examples
+  format: yaml
+  version: 2
+  kind: examples
+profile: rust-primer.yaml
+cases:
+  - id: RS-TYPED-PARSE-AND-COMMIT
+    language: rust
+    mode: run
+    demonstrates: [RS-ERRORS, RS-STATE, RS-ITERATION]
+    description: Domain errors propagate with ? and a failed update preserves the prior value.
+    code: |
+      #[derive(Debug, PartialEq)]
+      enum CountError { InvalidText, OutOfRange }
+      #[derive(Debug, PartialEq)]
+      struct Count(u8);
+      impl Count {
+          fn parse(text: &str) -> Result<Self, CountError> {
+              let number = text.parse::<u16>().map_err(|_| CountError::InvalidText)?;
+              if number > 100 { return Err(CountError::OutOfRange); }
+              Ok(Self(u8::try_from(number).map_err(|_| CountError::OutOfRange)?))
+          }
+      }
+      fn set_count(destination: &mut Count, text: &str) -> Result<(), CountError> {
+          let next = Count::parse(text)?;
+          *destination = next;
+          Ok(())
+      }
+      fn main() {
+          let mut current = Count(7);
+          assert_eq!(set_count(&mut current, "12x"), Err(CountError::InvalidText));
+          assert_eq!(current, Count(7));
+          assert_eq!(set_count(&mut current, "101"), Err(CountError::OutOfRange));
+          assert_eq!(current, Count(7));
+          assert_eq!(set_count(&mut current, "0"), Ok(()));
+          assert_eq!(current, Count(0));
+          assert_eq!(set_count(&mut current, "100"), Ok(()));
+          assert_eq!(current, Count(100));
+      }
+  - id: RS-BORROW-RELATIONSHIP
+    language: rust
+    mode: run
+    demonstrates: [RS-OWNERSHIP]
+    description: A returned borrow explicitly shares its owner's lifetime without cloning.
+    code: |
+      fn first_or<'a>(items: &'a [String], fallback: &'a str) -> &'a str {
+          items.first().map_or(fallback, String::as_str)
+      }
+      fn main() {
+          let items = vec![String::from("owned")];
+          assert_eq!(first_or(&items, "missing"), "owned");
+          assert_eq!(first_or(&[], "missing"), "missing");
+      }
+  - id: RS-DROP-ON-PROPAGATION
+    language: rust
+    mode: run
+    demonstrates: [RS-RESOURCES, RS-ERRORS]
+    description: Early ? propagation drops an exclusively owned guard once.
+    code: |
+      use std::cell::Cell;
+      struct Guard<'a>(&'a Cell<u32>);
+      impl Drop for Guard<'_> {
+          fn drop(&mut self) { self.0.set(self.0.get() + 1); }
+      }
+      fn work(closed: &Cell<u32>) -> Result<(), &'static str> {
+          let _owner = Guard(closed);
+          Err("operation failed")?;
+          Ok(())
+      }
+      fn main() {
+          let closed = Cell::new(0);
+          assert_eq!(work(&closed), Err("operation failed"));
+          assert_eq!(closed.get(), 1);
+      }
+  - id: RS-ESCAPING-BORROW
+    language: rust
+    mode: compile_fail
+    demonstrates: [RS-OWNERSHIP]
+    description: The compiler rejects a borrow of an owner that is about to be destroyed.
+    diagnostic: E0515
+    code: |
+      fn dangling() -> &'static str {
+          let owner = String::from("temporary");
+          owner.as_str()
+      }
+      fn main() { println!("{}", dangling()); }
+  - id: RS-IGNORED-RESULT
+    language: rust
+    mode: compile_fail
+    demonstrates: [RS-ERRORS]
+    description: A must_use Result cannot be silently discarded under the example warning policy.
+    diagnostic: unused_must_use
+    code: |
+      fn commit() -> Result<(), &'static str> { Err("failed") }
+      fn main() { commit(); }

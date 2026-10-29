@@ -1,0 +1,106 @@
+document:
+  name: python-primer
+  format: yaml
+  version: 2
+  kind: language
+summary: Typed Python with runtime boundary validation, explicit effects, and owned resources.
+uses:
+  - common-primer.yaml
+baseline: >-
+  Declare supported Python versions in project metadata and use their stable syntax
+  and library APIs. Use the repository's formatter, linter, and type checker; enable
+  strict checking for new typed modules. Examples intentionally work on Python 3.10+;
+  TaskGroup needs 3.11+. Adopt newer features when the supported baseline permits them.
+examples: python-primer-examples.yaml
+rules:
+  - id: PY-TYPES
+    level: requirement
+    scope: Public APIs and untrusted data
+    rule: >-
+      Annotate parameters and results with concrete domain types; keep Any at
+      explicitly dynamic boundaries and narrow object before use. TypedDict,
+      Protocol, annotations, and cast do not validate runtime values. Validate
+      decoded payloads before creating typed domain objects, including bool versus
+      int and nonfinite floats where relevant. Do not blanket-ignore type errors.
+    reason: Python executes unchecked values regardless of the declared type.
+    verification: Run a type checker and runtime tests against malformed values that annotations cannot reject.
+  - id: PY-DATA
+    level: default
+    scope: Data models and function signatures
+    rule: >-
+      Use dataclasses or existing validation models for fixed shape, enums for
+      distinct states, and dictionaries for genuinely dynamic keys. Validate domain
+      invariants at construction. frozen dataclasses are shallow; normalize mutable
+      inputs when an immutable snapshot is promised. Use default_factory or None
+      for per-call mutable defaults and keyword-only parameters for ambiguous options.
+    reason: Prevents accidental shared mutation and partially described dictionary protocols.
+    verification: Test invalid construction, alias mutation, independent defaults, and missing/extra fields.
+  - id: PY-ERRORS
+    level: requirement
+    scope: Exceptions and operation outcomes
+    rule: >-
+      Use ordinary typed exceptions with useful context; catch the narrow class
+      the boundary can handle and chain translated exceptions with raise ... from.
+      Use None for documented absence, not every failure. Do not swallow errors or
+      catch BaseException routinely. Retry only identified transient failures with
+      bounded attempts, timeout, and idempotency considered.
+    reason: Prevents misleading empty output and failures detached from their original cause.
+    verification: Test success, expected absence, malformed input, operational failure, and preserved exception causes.
+  - id: PY-RESOURCES
+    level: requirement
+    scope: Files, locks, transactions, subprocesses, and generators
+    rule: >-
+      Use with/async with or explicit try/finally for owned resources. Define
+      transaction commit/rollback and partial-output behavior. Use pathlib for
+      paths; specify encoding and serialization contracts. Avoid shell interpolation
+      for subprocess arguments and set timeouts where work can hang.
+    reason: Prevents leaks, ambiguous partial writes, and command injection.
+    verification: Exercise failure after acquisition, cleanup, timeout, and representative path/encoding cases.
+  - id: PY-STRUCTURE
+    level: default
+    scope: Functions, objects, protocols, decorators, and imports
+    rule: >-
+      Prefer functions for transformations and classes for real state/invariants.
+      Use Protocol for structural interfaces and inheritance when the contract needs
+      it. Decorators, generators, and metaprogramming are valid tools when behavior,
+      signatures, and discovery remain inspectable. Keep import-time I/O, mutation,
+      plugin registration, and environment reads out of ordinary library modules.
+    reason: Prevents hidden initialization and runtime behavior that callers cannot infer.
+    verification: Import modules in a clean process and test the actual decorated/plugin entry points.
+  - id: PY-CONCURRENCY
+    level: requirement
+    scope: Async tasks, threads, processes, and shared mutable state
+    rule: >-
+      Use async for asynchronous work with an owned task lifetime; prefer TaskGroup
+      on supported versions. Propagate CancelledError after cleanup and bound task
+      fan-out. Keep blocking work off the event loop. The GIL is not an application
+      synchronization contract; define locking or message ownership for shared state
+      and shutdown for executors and worker processes.
+    reason: Prevents orphan tasks, silent cancellation, blocked event loops, and race-prone mutation.
+    verification: Test cancellation, task failure propagation, bounded concurrency, and worker teardown.
+  - id: PY-ITERATION
+    level: default
+    scope: Comprehensions, iterators, and performance
+    rule: >-
+      Use comprehensions for small transformations and loops for stateful branching.
+      Make single-pass consumption and lazy resource lifetimes explicit. Measure
+      algorithmic and allocation costs before adding caching or vectorized/native
+      paths; bound caches and preserve semantics across optimized paths.
+    reason: Prevents concise expressions and caches from hiding effects or unbounded memory growth.
+    verification: Test empty/repeated consumption and compare optimized behavior on representative inputs.
+  - id: PY-NOTEBOOKS
+    level: requirement
+    scope: Notebooks and experiments
+    rule: >-
+      Make data sources, dependencies, random seeds, and execution order explicit.
+      Move reused production logic into importable modules. A fresh-kernel run from
+      top to bottom must reproduce the claimed result; do not depend on hidden cells.
+    reason: Prevents saved output from being mistaken for reproducible execution.
+    verification: Execute from a clean kernel/environment and retain the inputs and artifacts needed for the claim.
+references:
+  - title: Python typing and runtime limits
+    url: https://docs.python.org/3/library/typing.html
+  - title: Dataclasses
+    url: https://docs.python.org/3/library/dataclasses.html
+  - title: Async tasks and cancellation
+    url: https://docs.python.org/3/library/asyncio-task.html

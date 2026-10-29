@@ -1,0 +1,109 @@
+document:
+  name: csharp-primer
+  format: yaml
+  version: 2
+  kind: language
+summary: Modern C# with honest nullability, explicit domain states, and owned async work.
+uses:
+  - common-primer.yaml
+baseline: >-
+  Use the repository's supported stable SDK, target frameworks, and language version;
+  pin the SDK in global.json when reproducibility requires it. Enable nullable
+  reference types. Prefer supported pattern matching, switch expressions, records,
+  required members, and collection expressions when they clarify the contract.
+  The executable examples use .NET 10 / C# 14; adoption does not require that upgrade.
+examples: csharp-primer-examples.yaml
+rules:
+  - id: CS-NULLABILITY
+    level: requirement
+    scope: Public contracts and nullable flows
+    rule: >-
+      Model null honestly and resolve new nullable diagnostics. Validate external
+      inputs at runtime. Use null-forgiving only with a nearby, valid lifetime/state
+      proof, not to mute uncertain flow. required ensures an initializer is supplied,
+      not that external or deserialized values satisfy domain invariants.
+    reason: An annotation or suppression cannot make an absent value safe.
+    verification: Build with nullable warnings enforced and exercise absent and malformed external values.
+  - id: CS-DATA
+    level: default
+    scope: Domain types and state
+    rule: >-
+      Use records for value equality, classes for reference identity and mutable
+      lifecycles, and readonly structs/record structs for suitable small value types.
+      Use constructors or factories to validate invariants and domain alternatives
+      for distinct outcomes. Records, init, and IReadOnlyList are not deep immutability;
+      copy or use immutable storage when aliasing would violate the contract.
+    reason: Prevents accidental identity, invalid state, and mutation through retained aliases.
+    verification: Test invalid construction, equality semantics, and mutation through an original collection alias.
+  - id: CS-ERRORS
+    level: default
+    scope: Application error APIs
+    rule: >-
+      Use Try APIs for routine parse/lookup failure, nullable values for absence,
+      and a domain result when callers need distinct outcomes. Follow idiomatic
+      .NET exceptions for invalid arguments and operational library failures;
+      do not invent a universal Result framework. Catch only where recovery,
+      contextual translation, or an application boundary is possible; preserve
+      stack traces with throw. Cancellation is a separate outcome.
+    reason: Keeps domain alternatives explicit without discarding the platform's error contracts.
+    verification: Exercise each domain outcome and operational failure; ensure catch blocks preserve diagnostics.
+  - id: CS-RESOURCES
+    level: requirement
+    scope: IDisposable, IAsyncDisposable, subscriptions, and pooled storage
+    rule: >-
+      Dispose owned resources with using/await using or an equivalent explicit
+      owner. Do not dispose borrowed services or return borrowed/pooled memory
+      beyond its valid lifetime. Unsubscribe owned callbacks at teardown. Use
+      SafeHandle for suitable native handles; audit unsafe/interop layout and pinning.
+    reason: Garbage collection does not provide timely external-resource cleanup or safe borrowing.
+    verification: Test exceptions, early return, cancellation, and owner teardown with exactly-once release.
+  - id: CS-ASYNC
+    level: requirement
+    scope: Tasks, cancellation, and concurrent work
+    rule: >-
+      Await or explicitly supervise every task and propagate meaningful cancellation.
+      Use Task by default; async void only for event signatures with explicit error
+      handling. Avoid sync-over-async blocking and unbounded Task.WhenAll fan-out.
+      CancellationToken is cooperative; define commit/rollback behavior when work
+      has side effects. Task.Run is for deliberate CPU offload, not fake async I/O.
+      Apply ConfigureAwait according to the component's synchronization-context contract.
+    reason: Prevents deadlocks, unobserved failures, and cancellation reported as successful completion.
+    verification: Test pre-cancellation, cancellation in flight, faults, concurrency bounds, and shutdown.
+  - id: CS-SHARED-STATE
+    level: requirement
+    scope: Collections, caches, events, and cross-thread state
+    rule: >-
+      Define thread-affinity or synchronization for mutation; immutable references
+      do not make mutable contents safe. Do not await inside lock or invoke unknown
+      callbacks under a lock. Specify concurrent updates, snapshots, and event reentrancy.
+    reason: Prevents data races and deadlocks outside the guarantees of the type system.
+    verification: Exercise overlapping updates, reentrant callbacks, and disposal during pending work.
+  - id: CS-EXPRESSIONS
+    level: default
+    scope: Pattern matching, collections, LINQ, and spans
+    rule: >-
+      Use expressions when the data flow is clearer and loops for stateful work.
+      Give collection expressions a target type; var x = [...] is invalid.
+      Make deferred enumeration, repeated queries, duplicate keys, and materialization
+      costs explicit. Keep Span/ref usage within valid lifetimes and use it when it
+      improves the operation, not as a blanket style. Handle unknown enum values.
+    reason: Prevents compact syntax from hiding delayed effects, missing cases, or invalid inference.
+    verification: Compile examples and test empty input, repeated enumeration, duplicate keys, and unknown values.
+  - id: CS-BOUNDARIES
+    level: default
+    scope: Interfaces, generics, dependency injection, reflection, and serialization
+    rule: >-
+      Prefer direct construction and composition where sufficient. Interfaces,
+      constrained generics, DI, inheritance, and source generators are valid when
+      they express real substitution or framework contracts. Keep registration and
+      resource ownership inspectable. Validate DTOs and version wire formats;
+      account for trimming/AOT when using reflection or dynamic code.
+    reason: Keeps runtime discovery and external data from creating hidden contracts.
+    verification: Exercise actual composition/serialization paths and supported publish modes, including AOT if claimed.
+references:
+  - title: C# collection expressions
+    url: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/collection-expressions
+  - title: C# record types and shallow immutability
+    url: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record
+  - title: Task cancellation
+    url: https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation
